@@ -797,23 +797,23 @@ if($GBL_STR_DB_Type eq "SQLite") {
     $NMS_Probe->log("Create SQLite view!",3);
     $NMS_Probe->localLog("Create SQLite view!",3);
     $DB->{AutoCommit} = 0;
-    my $v1 = $DB->prepare("CREATE VIEW IF NOT EXISTS 't_bp2i_nimsoft_doublon' AS SELECT name, count(name) as count FROM robots_list GROUP BY name ORDER BY count DESC");
+    my $v1 = $DB->prepare("CREATE VIEW IF NOT EXISTS 'nimsoft_doublon' AS SELECT name, count(name) as count FROM robots_list GROUP BY name ORDER BY count DESC");
     $v1->execute();
     $v1->finish;
-    my $v2 = $DB->prepare("CREATE VIEW IF NOT EXISTS 't_bp2i_nimsoft_conf' AS SELECT robot.name, config.probe, config.profile FROM probes_config config JOIN probes_list probe ON probe.id = config.probeid JOIN robots_list robot ON robot.id = probe.robotid");
+    my $v2 = $DB->prepare("CREATE VIEW IF NOT EXISTS 'nimsoft_conf' AS SELECT robot.name, config.probe, config.profile FROM probes_config config JOIN probes_list probe ON probe.id = config.probeid JOIN robots_list robot ON robot.id = probe.robotid");
     $v2->execute();
     $v2->finish;
-    my $v3 = $DB->prepare("CREATE VIEW IF NOT EXISTS 't_bp2i_nimsoft_probes_list' AS SELECT '/' || hubs.domain || '/' || hubs.name || '/' || robots.name as ADDR, probes.name, probes.versions, probes.process_state FROM probes_list probes JOIN robots_list robots ON robots.id = probes.robotid JOIN hubs_list hubs ON hubs.id = robots.hubid");
+    my $v3 = $DB->prepare("CREATE VIEW IF NOT EXISTS 'nimsoft_probes_list' AS SELECT '/' || hubs.domain || '/' || hubs.name || '/' || robots.name as ADDR, probes.name, probes.versions, probes.process_state FROM probes_list probes JOIN robots_list robots ON robots.id = probes.robotid JOIN hubs_list hubs ON hubs.id = robots.hubid");
     $v3->execute();
     $v3->finish;
-    my $v4 = $DB->prepare("CREATE VIEW IF NOT EXISTS 't_bp2i_nimsoft_missingprobes' AS SELECT robot.name AS robotname,missing.name AS probeName FROM missing_probes missing JOIN robots_list robot ON robot.id = missing.robotid");
+    my $v4 = $DB->prepare("CREATE VIEW IF NOT EXISTS 'nimsoft_missingprobes' AS SELECT robot.name AS robotname,missing.name AS probeName FROM missing_probes missing JOIN robots_list robot ON robot.id = missing.robotid");
     $v4->execute();
     $v4->finish;
-    my $v5 = $DB->prepare("CREATE VIEW IF NOT EXISTS 't_bp2i_nimsoft_robotsdown' AS SELECT * FROM robots_list WHERE status='2'");
+    my $v5 = $DB->prepare("CREATE VIEW IF NOT EXISTS 'nimsoft_robotsdown' AS SELECT * FROM robots_list WHERE status='2'");
     $v5->execute();
     $v5->finish;
     my $v6 = $DB->prepare("CREATE VIEW IF NOT EXISTS
-    	't_bp2i_nimsoft_diffversion_count'
+    	'nimsoft_diffversion_count'
     AS
     SELECT
     	RL.name as RobotName,RL.status,RL.os_minor,P.name,P.versions,P.build
