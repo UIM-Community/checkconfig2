@@ -2,8 +2,6 @@ use strict;
 use warnings;
 
 package Nimprobe::struct;
-use lib "D:/apps/Nimsoft/perllib";
-use lib "D:/apps/Nimsoft/Perl64/lib/Win32API";
 use Nimbus::API;
 use Nimbus::PDS;
 use Nimbus::CFG;
