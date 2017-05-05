@@ -32,7 +32,7 @@ my $LOG = 1;
 my $GBL_Time_ScriptExecutionTime = time();
 my $GBL_Time_ExecutionTimeStart = Libs::Tools::LogTime();
 my $GBL_STR_ProbeName = "checkconfig";
-my $GBL_STR_ProveVersion = "2.6";
+my $GBL_STR_ProveVersion = "2.8";
 my $GBL_STR_Directory = getcwd;
 my $GBL_STR_RemoteHUB = "hub";
 my $GBL_STR_Time_Format = "%.2f";
@@ -55,13 +55,15 @@ my %Excluded_Robots;
         $Excluded_Robots{$_} = 1;
     }
 }
-my @MonitoredProbes = split(",",$CFG->{"monitoring"}->{"monitored_probes"});
-my $GetRobotConfiguration = $CFG->{"monitoring"}->{"get_probes_configuration"};
-my $hubs_restrict = $CFG->{"monitoring"}->{"hubs_restrict"};
-my $conf_commit = $CFG->{"monitoring"}->{"conf_commit"};
-my $get_probes_log = $CFG->{"monitoring"}->{"get_probes_log"};
-my $get_packages = $CFG->{"monitoring"}->{"get_packages"} || 0;
-my $robot_secondcheck = $CFG->{"monitoring"}->{"robots_secondcheck"};
+my $domain                  = $CFG->{"setup"}->{"domain"};
+my @MonitoredProbes         = split(",",$CFG->{"monitoring"}->{"monitored_probes"});
+my $GetRobotConfiguration   = $CFG->{"monitoring"}->{"get_probes_configuration"};
+my $hubs_restrict           = $CFG->{"monitoring"}->{"hubs_restrict"};
+my $conf_commit             = $CFG->{"monitoring"}->{"conf_commit"};
+my $get_probes_log          = $CFG->{"monitoring"}->{"get_probes_log"};
+my $get_packages            = $CFG->{"monitoring"}->{"get_packages"} || 0;
+my $get_processes           = $CFG->{"monitoring"}->{"get_processes"} || 0;
+my $robot_secondcheck       = $CFG->{"monitoring"}->{"robots_secondcheck"};
 
 # Load WITH -F param !
 my $RobotTXT = 0;
@@ -147,6 +149,16 @@ my %RequeteSQL = (
             install_date DATE,
             FOREIGN KEY(robotid) REFERENCES robots_list(id)
         )",
+        createPROCESSES => "CREATE TABLE IF NOT EXISTS processes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            robotid INTEGER NOT NULL,
+            executable VARCHAR(255),
+            command_line VARCHAR(255),
+            binary_path VARCHAR(255),
+            user VARCHAR(255),
+            short_executable VARCHAR(255),
+            FOREIGN KEY(robotid) REFERENCES robots_list(id)
+        )",
         createMISSING => "CREATE TABLE IF NOT EXISTS missing_probes (
             robotid INTEGER NOT NULL,
             name TEXT NOT NULL,
@@ -157,9 +169,11 @@ my %RequeteSQL = (
             probeid INTEGER NOT NULL,
             probe TEXT NOT NULL,
             profile TEXT NOT NULL,
+            active VARCHAR(255),
             FOREIGN KEY(probeid) REFERENCES probes_list(id)
         )",
         dropROBOT => 'DROP TABLE IF EXISTS robots_list;',
+        dropPROCESSES => 'DROP TABLE IF EXISTS processes;',
         dropPROBE => 'DROP TABLE IF EXISTS probes_list;',
         dropHUB => 'DROP TABLE IF EXISTS hubs_list;',
         dropCONF => 'DROP TABLE IF EXISTS probes_config;',
@@ -206,6 +220,9 @@ my $GBL_STR_DB_Port = $CFG->{"database"}->{"port"};
     $DB->do($RequeteSQL{$GBL_STR_DB_Type}{dropROBOT});
     $DB->do($RequeteSQL{$GBL_STR_DB_Type}{createROBOT});
 
+    $DB->do($RequeteSQL{$GBL_STR_DB_Type}{dropPROCESSES});
+    $DB->do($RequeteSQL{$GBL_STR_DB_Type}{createPROCESSES});
+
     $DB->do($RequeteSQL{$GBL_STR_DB_Type}{dropPROBE});
     $DB->do($RequeteSQL{$GBL_STR_DB_Type}{createPROBE});
 
@@ -227,7 +244,7 @@ my $GBL_STR_DB_Port = $CFG->{"database"}->{"port"};
 
 my $FILENAME;
 if(scalar @ARGV > 0) {
-    if($ARGV[0] eq "--f" and exists $ARGV[1]) {
+    if(($ARGV[0] eq "-f" || $ARGV[0] eq "--f") and exists $ARGV[1]) {
         $RobotTXT = 1;
         $FILENAME = $ARGV[1];
         if(open(my $robotlist, '<:encoding(UTF-8)',$FILENAME)) {
@@ -254,10 +271,12 @@ else {
     $NMS_Probe->log("No script argument!",2);
     $NMS_Probe->localLog("No script argument!",2);
 }
+
 # ************************************************* #
 # Get HUBS
 # ************************************************* #
 sub doWork() {
+
     my $NMS_HUB_RES;
     my ($FINAL_RC_HUB,$RC) = NIME_ERROR;
     for(my $i = 1;$i <= 3;$i++) {
@@ -285,6 +304,7 @@ sub doWork() {
             for( my $count = 0; my $HUBNFO = $HUBS_PDS->getTable("hublist",PDS_PDS,$count); $count++) {
                 $HUBID_Count++;
                 my $HUB = new Nimprobe::hub($HUBID_Count,$HUBNFO);
+                next if $HUB->{domain} ne $domain;
                 if($hubs_restrict) {
                     if(exists $GBL_Hash_Hubs{$HUB->{name}}) {
                         if(not $GBL_Hash_Hubs{$HUB->{name}}) {
@@ -308,7 +328,6 @@ sub doWork() {
                 # if(not $HUB->{source}) {}
                 $HUB->insert($DB);
                 push(@HubsList,$HUB);
-                Libs::Tools::createDir("Output/$GBL_Time_ExecutionTimeStart/$HUB->{name}");
             }
             $DB->commit;
             $NMS_Probe->log(GREEN."\n--------- Hubs processing done ---------\n",3);
@@ -342,6 +361,10 @@ sub doWork() {
                             $ROBOT_Count++;
                             my $robot = new Nimprobe::robot($ROBOT_Count,$_->{id} - 1,$ROBOTNFO);
 
+                            if (index($robot->{name}, "http") != -1) {
+                                next;
+                            }
+
                             if(exists $Excluded_Robots{$robot->{name}}) {
                                 $ROBOT_Count--;
                                 $NMS_Probe->log("$robot->{name} is excluded from the pool.",2);
@@ -364,7 +387,7 @@ sub doWork() {
 
                             if($robot->{status} =~ /^(0)$/) {
                                 push(@RobotsList,$robot);
-                                Libs::Tools::createDir("Output/$GBL_Time_ExecutionTimeStart/$_->{name}/$robot->{name}");
+                                Libs::Tools::createDir("Output/$GBL_Time_ExecutionTimeStart/$robot->{name}");
                             }
                         }
                         last;
@@ -465,6 +488,35 @@ sub doWork() {
                             $probe->insert($DB);
 
                             # ************************************************* #
+                            # Récupération des processes
+                            # ************************************************* #
+                            if($get_processes && $_ eq "processes") {
+                                my ($RC,$Res) = Libs::Tools::Request("$robotInstance->{addr}/processes","list_processes");
+                                if($RC == NIME_OK) {
+                                    my $Hash = Nimbus::PDS->new($Res)->asHash();
+                                    my $count = scalar keys %{ $Hash };
+                                    $NMS_Probe->log(GREEN."[SUCCESS] ".RESET."Successfully retrieved $count processes profiles",3);
+                                    $NMS_Probe->localLog("[SUCCESS] Successfully retrieved $count profiles",3);
+                                    foreach my $id (keys %{ $Hash }) {
+                                        my $INSERT_CONF = $DB->prepare("INSERT INTO processes (id,robotid,executable,command_line,binary_path,user,short_executable) VALUES(NULL,?,?,?,?,?,?)");
+                                        $INSERT_CONF->execute(
+                                            $robotInstance->{id},
+                                            $Hash->{$id}->{executable},
+                                            $Hash->{$id}->{command_line},
+                                            $Hash->{$id}->{binary_path},
+                                            $Hash->{$id}->{user},
+                                            $Hash->{$id}->{short_executable}
+                                        );
+                                        $INSERT_CONF->finish;
+                                    }
+                                }
+                                else {
+                                    $NMS_Probe->log(RED."[ERR] ".RESET." Failed to get processes list.",1);
+                                    $NMS_Probe->localLog("[ERR] Failed to get processes list.",1);
+                                }
+                            }
+
+                            # ************************************************* #
                             # Récupération et parsing des configurations de sonde Nimsoft !
                             # ************************************************* #
                             my $probeGroupe = lc $probe->{group};
@@ -487,6 +539,10 @@ sub doWork() {
                             }
 
                             my $IHUB = $HubsList[$robotInstance->{hubid}];
+
+                            # ************************************************* #
+                            # Récupération de la configuration
+                            # ************************************************* #
                             if($GetRobotConfiguration) {
                                 my $PDS_args = pdsCreate();
 
@@ -511,9 +567,9 @@ sub doWork() {
                                 if($RC_CONF == NIME_OK) {
                                     $NMS_Probe->log(GREEN."[SUCCESS] ".RESET."download configuration of ".RESET.YELLOW."$_",3);
                                     $NMS_Probe->localLog("[SUCCESS] download configuration of $_",3);
-                                    if($probe->callbackCONF($DB,1,$LOCAL_GetConf_End_CallbackTime)) {
-                                    }
-                                    my $completePath = "Output/$GBL_Time_ExecutionTimeStart/$IHUB->{name}/$robotInstance->{name}/$probe->{config}";
+                                    $probe->callbackCONF($DB,1,$LOCAL_GetConf_End_CallbackTime);
+
+                                    my $completePath = "Output/$GBL_Time_ExecutionTimeStart/$robotInstance->{name}/$probe->{config}";
                                     if($probe->scanCONF($ProbePDS_CFG,$completePath)) {
                                         $probe->parseCONF($DB);
                                         $NMS_Probe->log(GREEN."[SUCCESS] ".RESET."Parse ".YELLOW."$_".RESET." configuration.",3);
@@ -531,6 +587,9 @@ sub doWork() {
 
                             }
 
+                            # ************************************************* #
+                            # Récupération de la log
+                            # ************************************************* #
                             if($get_probes_log) {
                                 my $log_pds = pdsCreate();
                                 pdsPut_PCH ($log_pds,"directory","$tempGroup");
@@ -543,7 +602,7 @@ sub doWork() {
                                 if($RC_LOG == NIME_OK) {
                                     my $CFG_Handler;
 
-                                    my $completePath = "Output/$GBL_Time_ExecutionTimeStart/$IHUB->{name}/$robotInstance->{name}/$logName";
+                                    my $completePath = "Output/$GBL_Time_ExecutionTimeStart/$robotInstance->{name}/$logName";
                                     unless(open($CFG_Handler,">>","$completePath")) {
                                         warn "\nUnable to create log file\n";
                                         return 0;
@@ -600,157 +659,6 @@ sub doWork() {
 
             }
 
-            foreach(@RobotsList_retry) {
-                my $robotInstance = $_;
-                print "\n";
-                $NMS_Probe->log(MAGENTA."Started probe_list for robot ".RESET.GREEN."$_->{name}".RESET."",2);
-                $NMS_Probe->localLog("Started probe_list for robot $_->{name}",2);
-
-                $NMS_Probe->log(YELLOW."Robot version => ".RESET.GREEN."$_->{version}",2);
-                $NMS_Probe->localLog("Robot version => $_->{version}",2);
-                $NMS_Probe->log("----------------------------->",3);
-                my $LOCAL_GetProbes_CallbackTime = time();
-                my ($RC,$RQ_Probe) = Libs::Tools::Request("$_->{addr}/controller","probe_list");
-                my $LOCAL_GetProbes_End_CallbackTime = sprintf("$GBL_STR_Time_Format",time() - $LOCAL_GetProbes_CallbackTime);
-                if($RC == NIME_OK) {
-                    $GBL_INT_FailCount--;
-                    my $Probe_PDS = Nimbus::PDS->new($RQ_Probe);
-                    my $ProbeNFO = $Probe_PDS->asHash();
-
-                    # ************************************************* #
-                    # Pour toutes les probes qu'on monitore !
-                    # ************************************************* #
-                    my $FailedsProbes = "";
-                    foreach(@MonitoredProbes) {
-                        # Si la probe existe !
-                        if($ProbeNFO->{$_}) {
-                            my $probeEnv_Name = $_;
-
-                            my $probe;
-                            $probe = new Nimprobe::probe($robotInstance->{id},$ProbeNFO,$probeEnv_Name);
-                            $probe->insert($DB);
-
-                            # ************************************************* #
-                            # Récupération et parsing des configurations de sonde Nimsoft !
-                            # ************************************************* #
-                            my $probeGroupe = lc $probe->{group};
-                            my $tempGroup = "probes/$probeGroupe/$_/";
-                            my $configName  = $probe->{config};
-                            my $logName = "$probe->{name}.log";
-
-                            if($probe->{name} eq "hub") {
-                                $tempGroup = "hub";
-                                $configName = "hub.cfg";
-                                $logName = "hub.log";
-                            }
-                            if($probe->{name} eq "controller") {
-                                $tempGroup = "robot";
-                                $configName = "controller.cfg";
-                                $logName = "controller.log"
-                            }
-                            if($probe->{name} eq "nas") {
-                                $tempGroup = "probes/service/$probe->{name}/";
-                            }
-
-                            my $IHUB = $HubsList[$robotInstance->{hubid}];
-                            if($GetRobotConfiguration) {
-                                my $PDS_args = pdsCreate();
-
-                                pdsPut_PCH ($PDS_args,"directory","$tempGroup");
-                                pdsPut_PCH ($PDS_args,"file","$configName");
-                                pdsPut_INT ($PDS_args,"buffer_size",10000000);
-
-                                my $LOCAL_GetConf_CallbackTime = time();
-                                my $RC_CONF = NIME_ERROR;
-                                my $RC_W;
-                                my $ProbePDS_CFG;
-                                for(my $i = 1;$i <= 3;$i++) {
-                                    ($RC_W, $ProbePDS_CFG) = nimNamedRequest("$robotInstance->{addr}/controller", "text_file_get", $PDS_args,3);
-                                    if($RC_W == NIME_OK) {
-                                        $RC_CONF = NIME_OK;
-                                        last;
-                                    }
-                                }
-                                pdsDelete($PDS_args);
-                                my $LOCAL_GetConf_End_CallbackTime = sprintf("$GBL_STR_Time_Format",time() - $LOCAL_GetConf_CallbackTime);
-
-                                if($RC_CONF == NIME_OK) {
-                                    $NMS_Probe->log(GREEN."[SUCCESS] ".RESET."download configuration of ".RESET.YELLOW."$_",3);
-                                    $NMS_Probe->localLog("[SUCCESS] download configuration of $_",3);
-                                    if($probe->callbackCONF($DB,1,$LOCAL_GetConf_End_CallbackTime)) {
-                                    }
-                                    my $completePath = "Output/$GBL_Time_ExecutionTimeStart/$IHUB->{name}/$robotInstance->{name}/$probe->{config}";
-                                    if($probe->scanCONF($ProbePDS_CFG,$completePath)) {
-                                        $probe->parseCONF($DB);
-                                        $NMS_Probe->log(GREEN."[SUCCESS] ".RESET."Parse ".YELLOW."$_".RESET." configuration.",3);
-                                        $NMS_Probe->localLog("[SUCCESS] Parse $_ configuration.",3);
-                                    }
-                                    else {
-                                        $NMS_Probe->log(RED."[ERR] ".RESET." Parse $_ configuration.",1);
-                                        $NMS_Probe->localLog("[ERR] Parse $_ configuration.",1);
-                                    }
-                                }
-                                else {
-                                    $probe->callbackCONF($DB,0,$LOCAL_GetConf_End_CallbackTime);
-                                    $NMS_Probe->log(RED."[ERR] ".RESET."to get conf of $_");
-                                }
-
-                            }
-
-                            if($get_probes_log) {
-                                my $log_pds = pdsCreate();
-                                pdsPut_PCH ($log_pds,"directory","$tempGroup");
-                                pdsPut_PCH ($log_pds,"file","$logName");
-                                pdsPut_INT ($log_pds,"buffer_size",10000000);
-
-                                my ($RC_LOG, $LOGPDS) = nimNamedRequest("$robotInstance->{addr}/controller", "text_file_get", $log_pds,3);
-                                pdsDelete($log_pds);
-
-                                if($RC_LOG == NIME_OK) {
-                                    my $CFG_Handler;
-
-                                    my $completePath = "Output/$GBL_Time_ExecutionTimeStart/$IHUB->{name}/$robotInstance->{name}/$logName";
-                                    unless(open($CFG_Handler,">>","$completePath")) {
-                                        warn "\nUnable to create log file\n";
-                                        return 0;
-                                    }
-                                    my @ARR_CFG_Config = Nimbus::PDS->new($LOGPDS)->asHash();
-                                    print $CFG_Handler $ARR_CFG_Config[0]{'file_content'};
-                                    close $CFG_Handler;
-                                    $NMS_Probe->log(GREEN."[SUCCESS]".RESET." Download log of => ".RESET.YELLOW."$logName",3);
-                                    $NMS_Probe->localLog("[SUCCESS] Download log of => $logName",3);
-                                }
-                                else {
-                                    $NMS_Probe->log(RED."[ERR]".RESET." Download log of => ".RESET.YELLOW."$logName",3);
-                                    $NMS_Probe->log("[ERR] Download log of => $logName",3);
-                                }
-                            }
-
-                            $NMS_Probe->log("----------------------------->",3);
-
-                        }
-                        else {
-                            $FailedsProbes.= "$_,";
-                        }
-                    }
-
-                    if(length($FailedsProbes) > 0) {
-                        $NMS_Probe->log(YELLOW."[INFO] ".RESET."Failed probelist => ".YELLOW."$FailedsProbes",2);
-                        $NMS_Probe->localLog("Failed probelist => $FailedsProbes",2);
-                    }
-                }
-                else {
-                    $NMS_Probe->log(RED."[ERR] ".RESET."Impossible d'avoir la liste des sondes pour le robot ".YELLOW."$_->{name}",1);
-                    $NMS_Probe->localLog("Impossible d'avoir la liste des sondes pour le robot $_->{name}",1);
-                    $NMS_Probe->log(RED."[ERR] ".RESET."Status du robot => ".YELLOW."$_->{status}",2);
-                    $NMS_Probe->localLog("Status du robot => $_->{status}",2);
-                    $NMS_Probe->log("----------------------------->",3);
-                }
-                $NMS_Probe->log(MAGENTA."Finish probe_list for robot ".RESET.GREEN."$_->{name}",3);
-                $NMS_Probe->localLog( "Finish probe_list for robot $_->{name}",3);
-
-            }
-
             if(not $conf_commit) {
                 $DB->commit;
             }
@@ -797,23 +705,23 @@ if($GBL_STR_DB_Type eq "SQLite") {
     $NMS_Probe->log("Create SQLite view!",3);
     $NMS_Probe->localLog("Create SQLite view!",3);
     $DB->{AutoCommit} = 0;
-    my $v1 = $DB->prepare("CREATE VIEW IF NOT EXISTS 'nimsoft_doublon' AS SELECT name, count(name) as count FROM robots_list GROUP BY name ORDER BY count DESC");
+    my $v1 = $DB->prepare("CREATE VIEW IF NOT EXISTS 't_bp2i_nimsoft_doublon' AS SELECT name, count(name) as count FROM robots_list GROUP BY name ORDER BY count DESC");
     $v1->execute();
     $v1->finish;
-    my $v2 = $DB->prepare("CREATE VIEW IF NOT EXISTS 'nimsoft_conf' AS SELECT robot.name, config.probe, config.profile FROM probes_config config JOIN probes_list probe ON probe.id = config.probeid JOIN robots_list robot ON robot.id = probe.robotid");
+    my $v2 = $DB->prepare("CREATE VIEW IF NOT EXISTS 't_bp2i_nimsoft_conf' AS SELECT robot.name, config.probe, config.profile FROM probes_config config JOIN probes_list probe ON probe.id = config.probeid JOIN robots_list robot ON robot.id = probe.robotid");
     $v2->execute();
     $v2->finish;
-    my $v3 = $DB->prepare("CREATE VIEW IF NOT EXISTS 'nimsoft_probes_list' AS SELECT '/' || hubs.domain || '/' || hubs.name || '/' || robots.name as ADDR, probes.name, probes.versions, probes.process_state FROM probes_list probes JOIN robots_list robots ON robots.id = probes.robotid JOIN hubs_list hubs ON hubs.id = robots.hubid");
+    my $v3 = $DB->prepare("CREATE VIEW IF NOT EXISTS 't_bp2i_nimsoft_probes_list' AS SELECT '/' || hubs.domain || '/' || hubs.name || '/' || robots.name as ADDR, probes.name, probes.versions, probes.process_state FROM probes_list probes JOIN robots_list robots ON robots.id = probes.robotid JOIN hubs_list hubs ON hubs.id = robots.hubid");
     $v3->execute();
     $v3->finish;
-    my $v4 = $DB->prepare("CREATE VIEW IF NOT EXISTS 'nimsoft_missingprobes' AS SELECT robot.name AS robotname,missing.name AS probeName FROM missing_probes missing JOIN robots_list robot ON robot.id = missing.robotid");
+    my $v4 = $DB->prepare("CREATE VIEW IF NOT EXISTS 't_bp2i_nimsoft_missingprobes' AS SELECT robot.name AS robotname,missing.name AS probeName FROM missing_probes missing JOIN robots_list robot ON robot.id = missing.robotid");
     $v4->execute();
     $v4->finish;
-    my $v5 = $DB->prepare("CREATE VIEW IF NOT EXISTS 'nimsoft_robotsdown' AS SELECT * FROM robots_list WHERE status='2'");
+    my $v5 = $DB->prepare("CREATE VIEW IF NOT EXISTS 't_bp2i_nimsoft_robotsdown' AS SELECT * FROM robots_list WHERE status='2'");
     $v5->execute();
     $v5->finish;
     my $v6 = $DB->prepare("CREATE VIEW IF NOT EXISTS
-    	'nimsoft_diffversion_count'
+    	't_bp2i_nimsoft_diffversion_count'
     AS
     SELECT
     	RL.name as RobotName,RL.status,RL.os_minor,P.name,P.versions,P.build
