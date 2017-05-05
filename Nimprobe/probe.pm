@@ -1,4 +1,6 @@
 package Nimprobe::probe;
+use lib "D:/apps/Nimsoft/perllib";
+use lib "D:/apps/Nimsoft/Perl64/lib/Win32API";
 use Nimbus::API;
 use Nimbus::PDS;
 use Nimbus::CFG;
@@ -130,6 +132,7 @@ sub parseCONF {
 
             foreach my $key ( keys %{ $final } ) {
                 my $Authorize_Insert = 1;
+                my $ActiveVal = $final->{$key}{active};
                 if($PCM{$monitored}{$monitoredSection}{needed_key}) {
                     foreach my $CONF_STR_Profile ( keys $PCM{$monitored}{$monitoredSection}{needed_key} ) {
                         if($final->{$key} ne '') {
@@ -143,14 +146,14 @@ sub parseCONF {
                     }
                 }
                 if($Authorize_Insert) {
-                    my $INSERT_CONF = $DB->prepare("INSERT INTO probes_config (id,probeid,probe,profile) VALUES(NULL,?,?,?)");
+                    my $INSERT_CONF = $DB->prepare("INSERT INTO probes_config (id,probeid,probe,profile,active) VALUES(NULL,?,?,?,?)");
                     if(lc $monitored eq "cdm") {
                         $key =~ s/#/\//g;
                     }
                     elsif(lc $monitored eq "logmon") {
                         $key =~ s/\//#/g;
                     }
-                    $INSERT_CONF->execute($this->{id},uc $monitored,$key);
+                    $INSERT_CONF->execute($this->{id},uc $monitored,$key,$ActiveVal);
                     $INSERT_CONF->finish;
                 }
             }
