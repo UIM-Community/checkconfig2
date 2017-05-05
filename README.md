@@ -19,6 +19,7 @@ At every execution a new SQLite table is created, at the end of the execution yo
     get_probes_configuration = 1
     get_probes_log = 0
     get_packages = 1
+    get_processes = 0
     monitored_probes  = cdm,processes,logmon,ntservices,ntevl,dirscan
     excluded_robots =
     hubs_list =
