@@ -37,5 +37,5 @@ At every execution a new SQLite table is created, at the end of the execution yo
 ## Load with .txt containing robots list
 
 ```
-checkconfig.pl --f robotslist.txt
+checkconfig.pl -f robotslist.txt
 ```
