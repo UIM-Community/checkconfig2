@@ -4,8 +4,7 @@ use warnings;
 # ************************************************* #
 # Chargement des librairies !
 # ************************************************* #
-use lib "D:/apps/Nimsoft/perllib";
-use lib "D:/apps/Nimsoft/Perl64/lib/Win32API";
+use lib "X:/Nimsoft/perllib";
 use Nimbus::API;
 use Nimbus::CFG;
 use Nimbus::PDS;
@@ -22,7 +21,6 @@ use Cwd;
 use Time::HiRes qw( time );
 use DBI;
 use Term::ANSIColor qw(:constants);
-use Win32::Console::ANSI;
 use File::Copy;
 
 # ************************************************* #
@@ -268,7 +266,6 @@ if(scalar @ARGV > 0) {
     }
 }
 else {
-    $NMS_Probe->log("No script argument!",2);
     $NMS_Probe->localLog("No script argument!",2);
 }
 
@@ -286,7 +283,6 @@ sub doWork() {
             last;
         }
         else {
-            $NMS_Probe->log(YELLOW."$GBL_STR_RemoteHUB".RESET." not responding (timed out). [try $i]",1);
             $NMS_Probe->localLog("$GBL_STR_RemoteHUB not responding (timed out). [try $i]",1);
         }
     }
@@ -308,18 +304,15 @@ sub doWork() {
                 if($hubs_restrict) {
                     if(exists $GBL_Hash_Hubs{$HUB->{name}}) {
                         if(not $GBL_Hash_Hubs{$HUB->{name}}) {
-                            $NMS_Probe->log(GREEN."$HUB->{name}".RESET.YELLOW." EXCLUDED from checkconfig pool.",2);
                             $NMS_Probe->localLog("$HUB->{name} EXCLUDED from checkconfig pool.",2);
                             $HUBID_Count--;
                             next;
                         }
                         else {
-                            $NMS_Probe->log(GREEN."$HUB->{name} INCLUDED in the checkconfig pool.",2);
                             $NMS_Probe->localLog("$HUB->{name} INCLUDED in the checkconfig pool.",2);
                         }
                     }
                     else {
-                        $NMS_Probe->log(GREEN."$HUB->{name}".RESET.YELLOW." EXCLUDED from checkconfig pool.",2);
                         $NMS_Probe->localLog("$HUB->{name} EXCLUDED from checkconfig pool.",2);
                         $HUBID_Count--;
                         next;
@@ -330,11 +323,9 @@ sub doWork() {
                 push(@HubsList,$HUB);
             }
             $DB->commit;
-            $NMS_Probe->log(GREEN."\n--------- Hubs processing done ---------\n",3);
             $NMS_Probe->localLog("Hubs processing done",3);
 
             if(scalar @HubsList == 0) {
-                $NMS_Probe->log(YELLOW "[MAJOR] No hubs find on Nimsoft!",1);
                 $NMS_Probe->localLog("[MAJOR] No hubs find on Nimsoft!",1);
                 return;
             }
@@ -352,7 +343,6 @@ sub doWork() {
                     my $LOCAL_GetRobots_CallbackTime = time();
                     my ($RC,$RQ_Robot) = Libs::Tools::Request("/$_->{domain}/$_->{name}/$_->{robotname}/hub","getrobots");
                     my $LOCAL_GetRobots_End_CallbackTime = sprintf("$GBL_STR_Time_Format",time() - $LOCAL_GetRobots_CallbackTime);
-                    $NMS_Probe->log(GREEN."HUB $_->{name} ".RESET." processing",2);
                     $NMS_Probe->localLog("HUB $_->{name} processing",2);
                     if($RC == NIME_OK) {
                         $_->robotCallback($DB,($RC) ? 0 : 1,$LOCAL_GetRobots_End_CallbackTime);
@@ -367,7 +357,6 @@ sub doWork() {
 
                             if(exists $Excluded_Robots{$robot->{name}}) {
                                 $ROBOT_Count--;
-                                $NMS_Probe->log("$robot->{name} is excluded from the pool.",2);
                                 $NMS_Probe->localLog("$robot->{name} is excluded from the pool.",2);
                                 next;
                             }
@@ -378,7 +367,6 @@ sub doWork() {
                                     next;
                                 }
                                 else {
-                                    $NMS_Probe->log(YELLOW."\t => $robot->{name} ".RESET."is in the list!",3);
                                     $NMS_Probe->localLog("$robot->{name} is in the list!",3);
                                 }
                                 $RobotsHash_TXT{$robot->{name}} = 1;
@@ -394,7 +382,6 @@ sub doWork() {
                     }
                     else {
                         $_->robotCallback($DB,($RC) ? 0 : 1,$LOCAL_GetRobots_End_CallbackTime);
-                        $NMS_Probe->log(RED."[ERR] ".RESET."Unable to get robotslist ! [try $count_retry]",1);
                         $NMS_Probe->localLog("[CRITICAL] Unable to get robotslist [try $count_retry]",1);
                     }
                     $_->robotAll($DB,sprintf("$GBL_STR_Time_Format",time() - $LOCAL_GetRobots_CallbackTime));
@@ -402,7 +389,6 @@ sub doWork() {
                 }
 
             }
-            $NMS_Probe->log(GREEN."\n--------- All robots processing done ---------\n",3);
             $NMS_Probe->localLog("All robots processing done",3);
 
             # ************************************************* #
@@ -418,16 +404,10 @@ sub doWork() {
                 $ROBOT_REF++;
                 my $robotInstance = $_;
                 print "\n";
-                $NMS_Probe->log(MAGENTA."Started probe_list for robot ".RESET.GREEN."$_->{name}".RESET." [count $ROBOT_REF / $ROBOT_Count]",2);
                 $NMS_Probe->localLog("Started probe_list for robot $_->{name} [count $ROBOT_REF / $ROBOT_Count]",2);
-
-                $NMS_Probe->log(YELLOW."Robot version => ".RESET.GREEN."$_->{version}",2);
                 $NMS_Probe->localLog("Robot version => $_->{version}",2);
-                $NMS_Probe->log("----------------------------->",3);
 
                 if($get_packages) {
-
-                    $NMS_Probe->log(YELLOW."Get packages from robot!",2);
                     $NMS_Probe->localLog("Get packages from robot!",2);
                     my $PDS = pdsCreate();
                     my ($PKG_RC,$PKG_OBJ) = nimNamedRequest("$_->{addr}/controller","inst_list_summary",$PDS,1);
@@ -495,7 +475,6 @@ sub doWork() {
                                 if($RC == NIME_OK) {
                                     my $Hash = Nimbus::PDS->new($Res)->asHash();
                                     my $count = scalar keys %{ $Hash };
-                                    $NMS_Probe->log(GREEN."[SUCCESS] ".RESET."Successfully retrieved $count processes profiles",3);
                                     $NMS_Probe->localLog("[SUCCESS] Successfully retrieved $count profiles",3);
                                     foreach my $id (keys %{ $Hash }) {
                                         my $INSERT_CONF = $DB->prepare("INSERT INTO processes (id,robotid,executable,command_line,binary_path,user,short_executable) VALUES(NULL,?,?,?,?,?,?)");
@@ -511,7 +490,6 @@ sub doWork() {
                                     }
                                 }
                                 else {
-                                    $NMS_Probe->log(RED."[ERR] ".RESET." Failed to get processes list.",1);
                                     $NMS_Probe->localLog("[ERR] Failed to get processes list.",1);
                                 }
                             }
@@ -565,24 +543,21 @@ sub doWork() {
                                 my $LOCAL_GetConf_End_CallbackTime = sprintf("$GBL_STR_Time_Format",time() - $LOCAL_GetConf_CallbackTime);
 
                                 if($RC_CONF == NIME_OK) {
-                                    $NMS_Probe->log(GREEN."[SUCCESS] ".RESET."download configuration of ".RESET.YELLOW."$_",3);
                                     $NMS_Probe->localLog("[SUCCESS] download configuration of $_",3);
                                     $probe->callbackCONF($DB,1,$LOCAL_GetConf_End_CallbackTime);
 
                                     my $completePath = "Output/$GBL_Time_ExecutionTimeStart/$robotInstance->{name}/$probe->{config}";
                                     if($probe->scanCONF($ProbePDS_CFG,$completePath)) {
                                         $probe->parseCONF($DB);
-                                        $NMS_Probe->log(GREEN."[SUCCESS] ".RESET."Parse ".YELLOW."$_".RESET." configuration.",3);
                                         $NMS_Probe->localLog("[SUCCESS] Parse $_ configuration.",3);
                                     }
                                     else {
-                                        $NMS_Probe->log(RED."[ERR] ".RESET." Parse $_ configuration.",1);
                                         $NMS_Probe->localLog("[ERR] Parse $_ configuration.",1);
                                     }
                                 }
                                 else {
                                     $probe->callbackCONF($DB,0,$LOCAL_GetConf_End_CallbackTime);
-                                    $NMS_Probe->log(RED."[ERR] ".RESET."to get conf of $_");
+                                    $NMS_Probe->localLog("[ERR] to get conf of $_");
                                 }
 
                             }
@@ -610,16 +585,14 @@ sub doWork() {
                                     my @ARR_CFG_Config = Nimbus::PDS->new($LOGPDS)->asHash();
                                     print $CFG_Handler $ARR_CFG_Config[0]{'file_content'};
                                     close $CFG_Handler;
-                                    $NMS_Probe->log(GREEN."[SUCCESS]".RESET." Download log of => ".RESET.YELLOW."$logName",3);
                                     $NMS_Probe->localLog("[SUCCESS] Download log of => $logName",3);
                                 }
                                 else {
-                                    $NMS_Probe->log(RED."[ERR]".RESET." Download log of => ".RESET.YELLOW."$logName",3);
-                                    $NMS_Probe->log("[ERR] Download log of => $logName",3);
+                                    $NMS_Probe->localLog("[ERR] Download log of => $logName",3);
                                 }
                             }
                             if($get_probes_log || $GetRobotConfiguration) {
-                                $NMS_Probe->log("----------------------------->",3);
+                                $NMS_Probe->localLog("----------------------------->",3);
                             }
 
                         }
@@ -632,7 +605,6 @@ sub doWork() {
                         }
                     }
                     if(length($FailedsProbes) > 0) {
-                        $NMS_Probe->log(YELLOW."[INFO] ".RESET."Failed probelist => ".YELLOW."$FailedsProbes",2);
                         $NMS_Probe->localLog("Failed probelist => $FailedsProbes",2);
                     }
                 }
@@ -640,11 +612,9 @@ sub doWork() {
                     if(not $robot_secondcheck) {
                         $_->probeCallback($DB,0,$LOCAL_GetProbes_End_CallbackTime);
                     }
-                    $NMS_Probe->log(RED."[ERR] ".RESET."Impossible d'avoir la liste des sondes pour le robot ".YELLOW."$_->{name}",1);
                     $NMS_Probe->localLog("Impossible d'avoir la liste des sondes pour le robot $_->{name}",1);
-                    $NMS_Probe->log(RED."[ERR] ".RESET."Status du robot => ".YELLOW."$_->{status}",2);
                     $NMS_Probe->localLog("Status du robot => $_->{status}",2);
-                    $NMS_Probe->log("----------------------------->",3);
+                    $NMS_Probe->localLog("----------------------------->",3);
                     if($_->{status} == 0 && $_->{ip} ne "127.0.0.1") {
                         my $i = 2;
                         while($i--) {
@@ -654,7 +624,6 @@ sub doWork() {
                     }
                     $GBL_INT_FailCount++;
                 }
-                $NMS_Probe->log(MAGENTA."Finish probe_list for robot ".RESET.GREEN."$_->{name}",3);
                 $NMS_Probe->localLog( "Finish probe_list for robot $_->{name}",3);
 
             }
@@ -665,26 +634,22 @@ sub doWork() {
             print "\n";
         }
         else {
-            $NMS_Probe->log(YELLOW."Please enter a list of hubs in the configuration file !",1);
             $NMS_Probe->localLog("Please enter a list of hubs in the configuration file !",1);
         }
 
     }
     else {
-        $NMS_Probe->log(RED."Unable to get the list of HUBS from => '$GBL_STR_RemoteHUB' ",1);
         $NMS_Probe->localLog("Unable to get the list of HUBS from => '$GBL_STR_RemoteHUB' ",1);
     }
 }
 doWork();
 
-$NMS_Probe->log(GREEN."Count of robot that fail get_probes callback =>".RESET.YELLOW." $GBL_INT_FailCount",1);
 $NMS_Probe->localLog("Count of robot that fail get_probes callback => $GBL_INT_FailCount",1);
 
 # ************************************************* #
 # Reject file for robotslist with -F args
 # ************************************************* #
 if($RobotTXT == 1) {
-    $NMS_Probe->log("Generate reject file !",3);
     $NMS_Probe->localLog("Generate reject file !",3);
     my $file_handler;
     unless(open($file_handler,">", $ARGV[2] || "Output/$GBL_Time_ExecutionTimeStart/$GBL_Time_ExecutionTimeStart-reject.txt")) {
@@ -702,7 +667,6 @@ if($RobotTXT == 1) {
 
 # Create SQLite view
 if($GBL_STR_DB_Type eq "SQLite") {
-    $NMS_Probe->log("Create SQLite view!",3);
     $NMS_Probe->localLog("Create SQLite view!",3);
     $DB->{AutoCommit} = 0;
     my $v1 = $DB->prepare("CREATE VIEW IF NOT EXISTS 't_bp2i_nimsoft_doublon' AS SELECT name, count(name) as count FROM robots_list GROUP BY name ORDER BY count DESC");
@@ -746,7 +710,6 @@ $DB->disconnect;
 
 # Move checkconfig.db if dataType == SQLite !
 if($GBL_STR_DB_Type eq "SQLite"){
-    $NMS_Probe->log(YELLOW."Copy SQLite database to the local execution directory!",3);
     $NMS_Probe->localLog("Copy SQLite database to the local execution directory!",3);
     copy("$GBL_STR_DB_File.db","Output/$GBL_Time_ExecutionTimeStart/$GBL_STR_DB_File.db") or warn "SQLite database copy failed: $!";
 }
@@ -761,7 +724,7 @@ $NMS_Probe->close();
 my $GBL_Time_ScriptExecutionTime_End = time();
 my $FINAL_TIME = sprintf("$GBL_STR_Time_Format", $GBL_Time_ScriptExecutionTime_End - $GBL_Time_ScriptExecutionTime);
 
-print MAGENTA."\nFinal execution time = ".RESET.YELLOW."$FINAL_TIME second(s) !\n".RESET;
+print "\nFinal execution time = $FINAL_TIME second(s) !\n";
 
 1;
 __END__
