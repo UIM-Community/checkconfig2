@@ -34,8 +34,16 @@ At every execution a new SQLite table is created, at the end of the execution yo
 - conf_commit => SQL auto-commit (stay to 1 for good performance).
 
 
-## Load with .txt containing robots list
+## Load with .txt containing a robots list
 
 ```
 checkconfig.pl -f robotslist.txt
+```
+
+The list of robots must be separated by a new line `\n`.
+
+```
+robot1
+robot2
+robot3
 ```
