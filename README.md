@@ -5,6 +5,11 @@ Retrieve configuration for hubs, robots and probes / packages (and SSR profile i
 
 At every execution a new SQLite table is created, at the end of the execution you can open the SQLite database to see your data.
 
+> Think to update the use lib "X:/Nimsoft/perllib"; at the start of the script
+
+## Requirements
+- CA UIM Perl SDK (with all the requirement & perl executable installed on the system)
+
 ## Configuration 
 
 ```xml
